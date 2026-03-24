@@ -581,6 +581,12 @@
                 "time_granularity": {
                     "type": "string"
                 },
+                "params": {
+                    "items": {
+                        "$ref": "#/definitions/metric_param_schema"
+                    },
+                    "type": "array"
+                },
                 "type": {
                     "enum": [
                         "SIMPLE",
@@ -603,6 +609,36 @@
                 "name",
                 "type",
                 "type_params"
+            ],
+            "type": "object"
+        },
+        "metric_param_schema": {
+            "$id": "metric_param_schema",
+            "additionalProperties": false,
+            "properties": {
+                "name": {
+                    "pattern": "(?!.*__).*^[a-z][a-z0-9_]*[a-z0-9]$",
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "type": {
+                    "enum": [
+                        "string",
+                        "int",
+                        "float"
+                    ]
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "default": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "name"
             ],
             "type": "object"
         },

@@ -18,8 +18,13 @@ from dbt_semantic_interfaces.implementations.metric import (
     PydanticMetricAggregationParams,
     PydanticMetricInput,
     PydanticMetricInputMeasure,
+    PydanticMetricParam,
     PydanticMetricTimeWindow,
     PydanticMetricTypeParams,
+)
+from dbt_semantic_interfaces.implementations.filters.where_filter import (
+    PydanticWhereFilter,
+    PydanticWhereFilterIntersection,
 )
 from dbt_semantic_interfaces.implementations.semantic_manifest import (
     PydanticSemanticManifest,
@@ -45,6 +50,7 @@ from dbt_semantic_interfaces.validations.metrics import (
     CumulativeMetricRule,
     DerivedMetricRule,
     MetricAggregationParamsInForSimpleMetricsRule,
+    MetricParamRule,
     MetricsCountAggregationExprRule,
     MetricsNonAdditiveDimensionsRule,
     MetricsPercentileAggregationRule,
@@ -1527,3 +1533,128 @@ def test_simple_metric_with_expr_generates_warning() -> None:
         error_substrings=["should not have an expr set if it's proxy from measures"],
         issues=validation_results.all_issues,
     )
+
+
+def _make_simple_manifest(metric: PydanticMetric) -> PydanticSemanticManifest:
+    """Helper to wrap a single metric in a minimal manifest for validation tests."""
+    return PydanticSemanticManifest(
+        semantic_models=[],
+        metrics=[metric],
+        project_configuration=EXAMPLE_PROJECT_CONFIGURATION,
+    )
+
+
+def _metric_with_params(params: list) -> PydanticMetric:
+    """Helper to build a minimal simple metric with the given params list."""
+    return metric_with_guaranteed_meta(
+        name="test_metric",
+        type=MetricType.SIMPLE,
+        type_params=PydanticMetricTypeParams(
+            metric_aggregation_params=PydanticMetricAggregationParams(
+                semantic_model="test_model",
+                agg=AggregationType.SUM,
+                agg_time_dimension="ds",
+            )
+        ),
+        params=params,
+    )
+
+
+def test_metric_param_rule_passes_for_valid_params() -> None:
+    """MetricParamRule raises no issues for a well-formed params list."""
+    validator = SemanticManifestValidator[PydanticSemanticManifest]([MetricParamRule()])
+    metric = _metric_with_params(
+        [
+            PydanticMetricParam(name="product_name", type="string", required=True),
+            PydanticMetricParam(name="min_spend", type="int", required=False, default="0"),
+        ]
+    )
+    results = validator.validate_semantic_manifest(_make_simple_manifest(metric))
+    assert not results.has_blocking_issues
+
+
+def test_metric_param_rule_rejects_duplicate_param_names() -> None:
+    """MetricParamRule raises a ValidationError when two params share the same name."""
+    validator = SemanticManifestValidator[PydanticSemanticManifest]([MetricParamRule()])
+    metric = _metric_with_params(
+        [
+            PydanticMetricParam(name="product_name", type="string"),
+            PydanticMetricParam(name="product_name", type="string"),
+        ]
+    )
+    results = validator.validate_semantic_manifest(_make_simple_manifest(metric))
+    assert results.has_blocking_issues
+    check_error_in_issues(
+        error_substrings=["duplicate param name 'product_name'"],
+        issues=results.all_issues,
+    )
+
+
+def test_metric_param_rule_rejects_optional_param_without_default() -> None:
+    """MetricParamRule raises a ValidationError for required=false with no default."""
+    validator = SemanticManifestValidator[PydanticSemanticManifest]([MetricParamRule()])
+    metric = _metric_with_params(
+        [PydanticMetricParam(name="min_spend", type="int", required=False)]
+    )
+    results = validator.validate_semantic_manifest(_make_simple_manifest(metric))
+    assert results.has_blocking_issues
+    check_error_in_issues(
+        error_substrings=["required=false but no default value"],
+        issues=results.all_issues,
+    )
+
+
+def test_metric_param_rule_rejects_undeclared_param_in_filter() -> None:
+    """MetricParamRule raises a ValidationError when a filter references an undeclared param."""
+    validator = SemanticManifestValidator[PydanticSemanticManifest]([MetricParamRule()])
+    metric = metric_with_guaranteed_meta(
+        name="test_metric",
+        type=MetricType.SIMPLE,
+        type_params=PydanticMetricTypeParams(
+            metric_aggregation_params=PydanticMetricAggregationParams(
+                semantic_model="test_model",
+                agg=AggregationType.SUM,
+                agg_time_dimension="ds",
+            )
+        ),
+        filter=PydanticWhereFilterIntersection(
+            where_filters=[
+                PydanticWhereFilter(
+                    where_sql_template="{{ Dimension('product__name') }} = '{{ params.product_name }}'"
+                )
+            ]
+        ),
+        params=[PydanticMetricParam(name="region", type="string")],  # product_name not declared
+    )
+    results = validator.validate_semantic_manifest(_make_simple_manifest(metric))
+    assert results.has_blocking_issues
+    check_error_in_issues(
+        error_substrings=["references undeclared param 'params.product_name'"],
+        issues=results.all_issues,
+    )
+
+
+def test_metric_param_rule_passes_when_filter_refs_match_declared_params() -> None:
+    """MetricParamRule raises no issues when all filter param refs are declared."""
+    validator = SemanticManifestValidator[PydanticSemanticManifest]([MetricParamRule()])
+    metric = metric_with_guaranteed_meta(
+        name="test_metric",
+        type=MetricType.SIMPLE,
+        type_params=PydanticMetricTypeParams(
+            metric_aggregation_params=PydanticMetricAggregationParams(
+                semantic_model="test_model",
+                agg=AggregationType.SUM,
+                agg_time_dimension="ds",
+            )
+        ),
+        filter=PydanticWhereFilterIntersection(
+            where_filters=[
+                PydanticWhereFilter(
+                    where_sql_template="{{ Dimension('product__name') }} = '{{ params.product_name }}'"
+                )
+            ]
+        ),
+        params=[PydanticMetricParam(name="product_name", type="string")],
+    )
+    results = validator.validate_semantic_manifest(_make_simple_manifest(metric))
+    assert not results.has_blocking_issues

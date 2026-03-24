@@ -1,4 +1,5 @@
 from typing import Dict, Generic, List, Literal, Optional, Sequence, Set, Tuple, Union
+import re
 
 from dbt_semantic_interfaces.implementations.metric import PydanticMetric
 from dbt_semantic_interfaces.protocols import (
@@ -1264,4 +1265,72 @@ class SimpleMetricExprRule(SemanticManifestValidationRule[SemanticManifestT], Ge
                     )
                 )
                 continue
+        return issues
+
+
+class MetricParamRule(SemanticManifestValidationRule[SemanticManifestT], Generic[SemanticManifestT]):
+    """Checks that metric params are configured correctly."""
+
+    # Matches {{ params.some_name }} with optional whitespace
+    _PARAM_REF_RE = re.compile(r"\{\{\s*params\.([a-z][a-z0-9_]*)\s*\}\}")
+
+    @classmethod
+    def _filter_templates(cls, metric: Metric) -> List[str]:
+        """Collect all where_sql_template strings from a metric and its input metric filters."""
+        templates: List[str] = []
+        if metric.filter:
+            for where_filter in metric.filter.where_filters:
+                templates.append(where_filter.where_sql_template)
+        for input_metric in metric.input_metrics:
+            if input_metric.filter:
+                for where_filter in input_metric.filter.where_filters:
+                    templates.append(where_filter.where_sql_template)
+        return templates
+
+    @classmethod
+    @validate_safely(whats_being_done="running model validation ensuring metric params are valid")
+    def validate_manifest(cls, semantic_manifest: SemanticManifestT) -> Sequence[ValidationIssue]:  # noqa: D
+        issues: List[ValidationIssue] = []
+
+        for metric in semantic_manifest.metrics:
+            context = MetricContext(
+                file_context=FileContext.from_metadata(metadata=metric.metadata),
+                metric=MetricModelReference(metric_name=metric.name),
+            )
+            declared_names: Set[str] = {p.name for p in metric.params} if metric.params else set()
+
+            if metric.params:
+                seen_names: Set[str] = set()
+                for param in metric.params:
+                    if param.name in seen_names:
+                        issues.append(
+                            ValidationError(
+                                context=context,
+                                message=f"Metric '{metric.name}' has duplicate param name '{param.name}'. "
+                                "Param names must be unique within a metric.",
+                            )
+                        )
+                    seen_names.add(param.name)
+
+                    if not param.required and param.default is None:
+                        issues.append(
+                            ValidationError(
+                                context=context,
+                                message=f"Metric '{metric.name}' param '{param.name}' has required=false but no "
+                                "default value. Either set required=true or provide a default.",
+                            )
+                        )
+
+            # Check that every {{ params.x }} reference in filters has a matching declared param
+            for template in cls._filter_templates(metric):
+                for ref_name in cls._PARAM_REF_RE.findall(template):
+                    if ref_name not in declared_names:
+                        issues.append(
+                            ValidationError(
+                                context=context,
+                                message=f"Metric '{metric.name}' filter references undeclared param "
+                                f"'params.{ref_name}'. Declare it under the metric's `params` field.",
+                            )
+                        )
+
         return issues

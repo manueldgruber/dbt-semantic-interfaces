@@ -7,6 +7,7 @@ from dbt_semantic_interfaces.implementations.filters.where_filter import (
 from dbt_semantic_interfaces.implementations.metric import (
     PydanticMetricInput,
     PydanticMetricInputMeasure,
+    PydanticMetricParam,
     PydanticMetricTimeWindow,
 )
 from dbt_semantic_interfaces.parsing.dir_to_model import (
@@ -670,3 +671,76 @@ def test_invalid_cumulative_metric_window_count_parsing_error() -> None:
     build_result = parse_yaml_files_to_semantic_manifest(files=[file, EXAMPLE_PROJECT_CONFIGURATION_YAML_CONFIG_FILE])
     assert build_result.issues.has_blocking_issues
     assert "Invalid count" in str(SemanticManifestValidationException(build_result.issues.all_issues))
+
+
+def test_metric_params_parsing() -> None:
+    """Test that metric params are parsed correctly from YAML."""
+    yaml_contents = textwrap.dedent(
+        """\
+        metric:
+          name: parameterized_metric
+          type: simple
+          type_params:
+            measure: some_measure
+          params:
+            - name: product_name
+              description: Filter by product name
+              type: string
+              required: true
+            - name: min_spend
+              type: int
+              required: false
+              default: "0"
+        """
+    )
+    file = YamlConfigFile(filepath="inline_for_test", contents=yaml_contents)
+
+    build_result = parse_yaml_files_to_semantic_manifest(files=[file, EXAMPLE_PROJECT_CONFIGURATION_YAML_CONFIG_FILE])
+
+    assert len(build_result.semantic_manifest.metrics) == 1
+    metric = build_result.semantic_manifest.metrics[0]
+    assert metric.params is not None
+    assert len(metric.params) == 2
+
+    product_name_param = metric.params[0]
+    assert product_name_param.name == "product_name"
+    assert product_name_param.description == "Filter by product name"
+    assert product_name_param.type == "string"
+    assert product_name_param.required is True
+    assert product_name_param.default is None
+
+    min_spend_param = metric.params[1]
+    assert min_spend_param.name == "min_spend"
+    assert min_spend_param.type == "int"
+    assert min_spend_param.required is False
+    assert min_spend_param.default == "0"
+
+
+def test_metric_without_params_parsing() -> None:
+    """Test that a metric without params parses correctly and has params=None."""
+    yaml_contents = textwrap.dedent(
+        """\
+        metric:
+          name: no_params_metric
+          type: simple
+          type_params:
+            measure: some_measure
+        """
+    )
+    file = YamlConfigFile(filepath="inline_for_test", contents=yaml_contents)
+
+    build_result = parse_yaml_files_to_semantic_manifest(files=[file, EXAMPLE_PROJECT_CONFIGURATION_YAML_CONFIG_FILE])
+
+    assert len(build_result.semantic_manifest.metrics) == 1
+    metric = build_result.semantic_manifest.metrics[0]
+    assert metric.params is None
+
+
+def test_pydantic_metric_param_defaults() -> None:
+    """Test that PydanticMetricParam default values are correct."""
+    param = PydanticMetricParam(name="my_param")
+    assert param.name == "my_param"
+    assert param.description is None
+    assert param.type == "string"
+    assert param.required is True
+    assert param.default is None

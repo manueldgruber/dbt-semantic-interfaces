@@ -351,6 +351,23 @@ metric_config_schema = {
 }
 
 # Top level object schemas
+metric_param_schema = {
+    "$id": "metric_param_schema",
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "pattern": TRANSFORM_OBJECT_NAME_PATTERN,
+        },
+        "description": {"type": "string"},
+        "type": {"enum": ["string", "int", "float"]},
+        "required": {"type": "boolean"},
+        "default": {"type": "string"},
+    },
+    "additionalProperties": False,
+    "required": ["name"],
+}
+
 metric_schema = {
     "$id": "metric_schema",
     "type": "object",
@@ -366,6 +383,7 @@ metric_schema = {
         "label": {"type": "string"},
         "config": {"$ref": "metric_config_schema"},
         "time_granularity": {"type": "string"},
+        "params": {"type": "array", "items": {"$ref": "metric_param_schema"}},
     },
     "additionalProperties": False,
     "required": ["name", "type", "type_params"],
@@ -570,6 +588,7 @@ semantic_model_schema = {
 schema_store = {
     # Top level schemas
     metric_schema["$id"]: metric_schema,
+    metric_param_schema["$id"]: metric_param_schema,
     semantic_model_schema["$id"]: semantic_model_schema,
     project_configuration_schema["$id"]: project_configuration_schema,
     saved_query_schema["$id"]: saved_query_schema,

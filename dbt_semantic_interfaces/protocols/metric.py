@@ -20,6 +20,35 @@ from dbt_semantic_interfaces.type_enums import (
 )
 
 
+class MetricParam(Protocol):
+    """Defines a runtime parameter that can be passed to a metric at query time."""
+
+    @property
+    @abstractmethod
+    def name(self) -> str:  # noqa: D
+        ...
+
+    @property
+    @abstractmethod
+    def description(self) -> Optional[str]:  # noqa: D
+        ...
+
+    @property
+    @abstractmethod
+    def type(self) -> str:  # noqa: D
+        ...
+
+    @property
+    @abstractmethod
+    def required(self) -> bool:  # noqa: D
+        ...
+
+    @property
+    @abstractmethod
+    def default(self) -> Optional[str]:  # noqa: D
+        ...
+
+
 class MetricInputMeasure(Protocol):
     """Provides a pointer to a measure along with metric-specific processing directives.
 
@@ -422,4 +451,10 @@ class Metric(Protocol):
         - as the default grain for metric_time if no grain is specified
         - as the window function order by when reaggregating cumulative metrics for non-default grains
         """
+        pass
+
+    @property
+    @abstractmethod
+    def params(self) -> Optional[Sequence[MetricParam]]:
+        """Runtime parameters that can be passed to this metric at query time."""
         pass

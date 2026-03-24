@@ -1,7 +1,7 @@
 import datetime
 import logging
 import textwrap
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 import dateutil.parser
 
@@ -128,6 +128,8 @@ def metric_with_guaranteed_meta(
     metadata: PydanticMetadata = default_meta(),
     description: str = "adhoc metric",
     time_granularity: Optional[str] = None,
+    params: Optional[List] = None,
+    filter: Optional[Any] = None,
 ) -> PydanticMetric:
     """Creates a metric with the given input.
 
@@ -138,9 +140,10 @@ def metric_with_guaranteed_meta(
         description=description,
         type=type,
         type_params=type_params,
-        filter=None,
+        filter=filter,
         metadata=metadata,
         time_granularity=time_granularity,
+        params=params,
     )
 
 

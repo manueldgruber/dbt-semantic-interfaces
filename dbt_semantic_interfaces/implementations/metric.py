@@ -229,6 +229,16 @@ class PydanticMetricTypeParams(HashableBaseModel):
     is_private: Optional[bool] = False
 
 
+class PydanticMetricParam(HashableBaseModel):
+    """Defines a runtime parameter that can be passed to a metric at query time."""
+
+    name: str
+    description: Optional[str] = None
+    type: str = "string"  # one of: string, int, float
+    required: bool = True
+    default: Optional[str] = None
+
+
 class PydanticMetric(HashableBaseModel, ModelWithMetadataParsing, ProtocolHint[Metric]):
     """Describes a metric."""
 
@@ -245,6 +255,7 @@ class PydanticMetric(HashableBaseModel, ModelWithMetadataParsing, ProtocolHint[M
     label: Optional[str] = None
     config: Optional[PydanticSemanticLayerElementConfig]
     time_granularity: Optional[str] = None
+    params: Optional[List[PydanticMetricParam]] = None
 
     @classmethod
     def parse_obj(cls, input: Any) -> PydanticMetric:
