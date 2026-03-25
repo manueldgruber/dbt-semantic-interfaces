@@ -1590,6 +1590,22 @@ def test_metric_param_rule_rejects_duplicate_param_names() -> None:
     )
 
 
+def test_metric_param_rule_rejects_invalid_param_type() -> None:
+    """MetricParamRule raises a ValidationError when param type is not string, int, or float."""
+    validator = SemanticManifestValidator[PydanticSemanticManifest]([MetricParamRule()])
+    metric = _metric_with_params(
+        [
+            PydanticMetricParam(name="bad", type="decimal"),
+        ]
+    )
+    results = validator.validate_semantic_manifest(_make_simple_manifest(metric))
+    assert results.has_blocking_issues
+    check_error_in_issues(
+        error_substrings=["invalid type 'decimal'", "Allowed types: string, int, float"],
+        issues=results.all_issues,
+    )
+
+
 def test_metric_param_rule_rejects_optional_param_without_default() -> None:
     """MetricParamRule raises a ValidationError for required=false with no default."""
     validator = SemanticManifestValidator[PydanticSemanticManifest]([MetricParamRule()])

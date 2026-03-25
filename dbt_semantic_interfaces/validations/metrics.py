@@ -1273,6 +1273,7 @@ class MetricParamRule(SemanticManifestValidationRule[SemanticManifestT], Generic
 
     # Matches {{ params.some_name }} with optional whitespace
     _PARAM_REF_RE = re.compile(r"\{\{\s*params\.([a-z][a-z0-9_]*)\s*\}\}")
+    _ALLOWED_PARAM_TYPES = frozenset({"string", "int", "float"})
 
     @classmethod
     def _filter_templates(cls, metric: Metric) -> List[str]:
@@ -1311,6 +1312,15 @@ class MetricParamRule(SemanticManifestValidationRule[SemanticManifestT], Generic
                             )
                         )
                     seen_names.add(param.name)
+
+                    if param.type not in cls._ALLOWED_PARAM_TYPES:
+                        issues.append(
+                            ValidationError(
+                                context=context,
+                                message=f"Metric '{metric.name}' param '{param.name}' has invalid type "
+                                f"'{param.type}'. Allowed types: string, int, float.",
+                            )
+                        )
 
                     if not param.required and param.default is None:
                         issues.append(
