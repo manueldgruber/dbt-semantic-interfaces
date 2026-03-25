@@ -1,6 +1,6 @@
 import traceback
 from enum import Enum
-from typing import Generic, List, Sequence, Tuple
+from typing import Dict, Generic, List, Optional, Sequence, Tuple
 
 from dbt_semantic_interfaces.call_parameter_sets import JinjaCallParameterSets
 from dbt_semantic_interfaces.protocols import Metric, SemanticManifestT
@@ -26,6 +26,13 @@ class SemanticManifestNodeType(Enum):
 
     SAVED_QUERY = "saved query"
     METRIC = "metric"
+
+
+def _metric_jinja_params_for_validation(metric: Metric) -> Optional[Dict[str, str]]:
+    """Placeholder values for declared metric params so filter Jinja can be parsed."""
+    if not metric.params:
+        return None
+    return {p.name: "__METRIC_PARAM_PLACEHOLDER__" for p in metric.params}
 
 
 class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT], Generic[SemanticManifestT]):
@@ -139,10 +146,13 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
             file_context=FileContext.from_metadata(metadata=metric.metadata),
             metric=MetricModelReference(metric_name=metric.name),
         )
+        jinja_params = _metric_jinja_params_for_validation(metric)
 
         if metric.filter is not None:
             try:
-                metric.filter.filter_expression_parameter_sets(custom_granularity_names=valid_granularity_names)
+                metric.filter.filter_expression_parameter_sets(
+                    custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
+                )
             except Exception as e:
                 issues.append(
                     generate_exception_issue(
@@ -158,7 +168,7 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
                 issues += WhereFiltersAreParseable._validate_time_granularity_names_for_metric(
                     context=context,
                     filter_expression_parameter_sets=metric.filter.filter_expression_parameter_sets(
-                        custom_granularity_names=valid_granularity_names
+                        custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
                     ),
                     valid_granularity_names=valid_granularity_names,
                 )
@@ -167,7 +177,9 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
             measure = metric.type_params.measure
             if measure is not None and measure.filter is not None:
                 try:
-                    measure.filter.filter_expression_parameter_sets(custom_granularity_names=valid_granularity_names)
+                    measure.filter.filter_expression_parameter_sets(
+                        custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
+                    )
                 except Exception as e:
                     issues.append(
                         generate_exception_issue(
@@ -184,7 +196,7 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
                     issues += WhereFiltersAreParseable._validate_time_granularity_names_for_metric(
                         context=context,
                         filter_expression_parameter_sets=measure.filter.filter_expression_parameter_sets(
-                            custom_granularity_names=valid_granularity_names
+                            custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
                         ),
                         valid_granularity_names=valid_granularity_names,
                     )
@@ -192,7 +204,9 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
             numerator = metric.type_params.numerator
             if numerator is not None and numerator.filter is not None:
                 try:
-                    numerator.filter.filter_expression_parameter_sets(custom_granularity_names=valid_granularity_names)
+                    numerator.filter.filter_expression_parameter_sets(
+                        custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
+                    )
                 except Exception as e:
                     issues.append(
                         generate_exception_issue(
@@ -208,7 +222,7 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
                     issues += WhereFiltersAreParseable._validate_time_granularity_names_for_metric(
                         context=context,
                         filter_expression_parameter_sets=numerator.filter.filter_expression_parameter_sets(
-                            custom_granularity_names=valid_granularity_names
+                            custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
                         ),
                         valid_granularity_names=valid_granularity_names,
                     )
@@ -217,7 +231,7 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
             if denominator is not None and denominator.filter is not None:
                 try:
                     denominator.filter.filter_expression_parameter_sets(
-                        custom_granularity_names=valid_granularity_names
+                        custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
                     )
                 except Exception as e:
                     issues.append(
@@ -234,7 +248,7 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
                     issues += WhereFiltersAreParseable._validate_time_granularity_names_for_metric(
                         context=context,
                         filter_expression_parameter_sets=denominator.filter.filter_expression_parameter_sets(
-                            custom_granularity_names=valid_granularity_names
+                            custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
                         ),
                         valid_granularity_names=valid_granularity_names,
                     )
@@ -243,7 +257,7 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
                 if input_metric.filter is not None:
                     try:
                         input_metric.filter.filter_expression_parameter_sets(
-                            custom_granularity_names=valid_granularity_names
+                            custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
                         )
                     except Exception as e:
                         issues.append(
@@ -261,7 +275,7 @@ class WhereFiltersAreParseable(SemanticManifestValidationRule[SemanticManifestT]
                         issues += WhereFiltersAreParseable._validate_time_granularity_names_for_metric(
                             context=context,
                             filter_expression_parameter_sets=input_metric.filter.filter_expression_parameter_sets(
-                                custom_granularity_names=valid_granularity_names
+                                custom_granularity_names=valid_granularity_names, jinja_params=jinja_params
                             ),
                             valid_granularity_names=valid_granularity_names,
                         )
