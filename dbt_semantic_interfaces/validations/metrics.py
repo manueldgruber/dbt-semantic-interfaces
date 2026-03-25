@@ -1,5 +1,5 @@
-from typing import Dict, Generic, List, Literal, Optional, Sequence, Set, Tuple, Union
 import re
+from typing import Dict, Generic, List, Literal, Optional, Sequence, Set, Tuple, Union
 
 from dbt_semantic_interfaces.implementations.metric import PydanticMetric
 from dbt_semantic_interfaces.protocols import (
