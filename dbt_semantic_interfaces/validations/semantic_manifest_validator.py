@@ -1,7 +1,7 @@
 import copy
 import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import Generic, List, Sequence
+from typing import Generic, List, Optional, Sequence
 
 from dbt_semantic_interfaces.protocols import SemanticManifest, SemanticManifestT
 from dbt_semantic_interfaces.validations.agg_time_dimension import (
@@ -27,6 +27,7 @@ from dbt_semantic_interfaces.validations.metrics import (
     ConversionMetricRule,
     CumulativeMetricRule,
     DerivedMetricRule,
+    MetricParametersRule,
     SimpleMetricExprRule,
 )
 from dbt_semantic_interfaces.validations.non_empty import NonEmptyRule
@@ -91,6 +92,7 @@ class SemanticManifestValidator(Generic[SemanticManifestT]):
         PrimaryEntityRule[SemanticManifestT](),
         PrimaryEntityDimensionPairs[SemanticManifestT](),
         WhereFiltersAreParseable[SemanticManifestT](),
+        MetricParametersRule[SemanticManifestT](),
         SavedQueryRule[SemanticManifestT](),
         MetricLabelsRule[SemanticManifestT](),
         SemanticModelLabelsRule[SemanticManifestT](),
@@ -117,7 +119,8 @@ class SemanticManifestValidator(Generic[SemanticManifestT]):
             )
 
         self._rules = rules
-        self._executor = ProcessPoolExecutor(max_workers=max_workers)
+        self._max_workers = max_workers
+        self._executor: Optional[ProcessPoolExecutor] = None
 
     def validate_semantic_manifest(
         self, semantic_manifest: SemanticManifestT, multi_process: bool = False
@@ -141,6 +144,9 @@ class SemanticManifestValidator(Generic[SemanticManifestT]):
         self, semantic_manifest: SemanticManifestT
     ) -> SemanticManifestValidationResults:
         results: List[SemanticManifestValidationResults] = []
+
+        if self._executor is None:
+            self._executor = ProcessPoolExecutor(max_workers=self._max_workers)
 
         futures = [
             self._executor.submit(_validate_manifest_with_one_rule, validation_rule, semantic_manifest)

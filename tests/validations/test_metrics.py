@@ -18,6 +18,7 @@ from dbt_semantic_interfaces.implementations.metric import (
     PydanticMetricAggregationParams,
     PydanticMetricInput,
     PydanticMetricInputMeasure,
+    PydanticMetricParameter,
     PydanticMetricTimeWindow,
     PydanticMetricTypeParams,
 )
@@ -38,6 +39,7 @@ from dbt_semantic_interfaces.type_enums import (
     DimensionType,
     EntityType,
     MetricType,
+    ParameterType,
     PeriodAggregation,
     TimeGranularity,
 )
@@ -45,6 +47,7 @@ from dbt_semantic_interfaces.validations.metrics import (
     CumulativeMetricRule,
     DerivedMetricRule,
     MetricAggregationParamsInForSimpleMetricsRule,
+    MetricParametersRule,
     MetricsCountAggregationExprRule,
     MetricsNonAdditiveDimensionsRule,
     MetricsPercentileAggregationRule,
@@ -58,6 +61,93 @@ from dbt_semantic_interfaces.validations.validator_helpers import (
 )
 from tests.example_project_configuration import EXAMPLE_PROJECT_CONFIGURATION
 from tests.validations.validation_test_utils import check_error_in_issues
+
+
+def test_metric_parameters_validation_accepts_valid_parameterized_metric() -> None:
+    metric = PydanticMetric(
+        name="transaction_percentile",
+        type=MetricType.SIMPLE,
+        description="P{{ parameter('percentile_label') }} value",
+        type_params=PydanticMetricTypeParams(
+            expr="amount",
+            metric_aggregation_params=PydanticMetricAggregationParams(
+                semantic_model="transactions",
+                agg=AggregationType.PERCENTILE,
+                agg_params=PydanticMeasureAggregationParameters(percentile=0.5),
+            ),
+        ),
+        parameters=[
+            PydanticMetricParameter(name="percentile_label", type=ParameterType.INTEGER, default=95, min=0, max=100),
+        ],
+        filter=None,
+        metadata=None,
+    )
+    validation_issues = MetricParametersRule().validate_manifest(
+        PydanticSemanticManifest(
+            semantic_models=[],
+            metrics=[metric],
+            project_configuration=EXAMPLE_PROJECT_CONFIGURATION,
+        )
+    )
+
+    assert validation_issues == []
+
+
+def test_metric_parameters_validation_rejects_unknown_reference() -> None:
+    metric = metric_with_guaranteed_meta(
+        name="transaction_percentile",
+        type=MetricType.SIMPLE,
+        description="P{{ parameter('missing') }} value",
+        type_params=PydanticMetricTypeParams(
+            metric_aggregation_params=PydanticMetricAggregationParams(
+                semantic_model="transactions",
+                agg=AggregationType.SUM,
+            ),
+        ),
+    )
+    validation_issues = MetricParametersRule().validate_manifest(
+        PydanticSemanticManifest(
+            semantic_models=[],
+            metrics=[metric],
+            project_configuration=EXAMPLE_PROJECT_CONFIGURATION,
+        )
+    )
+
+    check_error_in_issues(
+        error_substrings=["references parameter 'missing', but it is not declared"],
+        issues=validation_issues,
+    )
+
+
+def test_metric_parameters_validation_rejects_invalid_default() -> None:
+    metric = PydanticMetric(
+        name="transaction_percentile",
+        type=MetricType.SIMPLE,
+        description="",
+        type_params=PydanticMetricTypeParams(
+            metric_aggregation_params=PydanticMetricAggregationParams(
+                semantic_model="transactions",
+                agg=AggregationType.SUM,
+            ),
+        ),
+        parameters=[
+            PydanticMetricParameter(name="percentile", type=ParameterType.NUMBER, default=2.0, min=0, max=1),
+        ],
+        filter=None,
+        metadata=None,
+    )
+    validation_issues = MetricParametersRule().validate_manifest(
+        PydanticSemanticManifest(
+            semantic_models=[],
+            metrics=[metric],
+            project_configuration=EXAMPLE_PROJECT_CONFIGURATION,
+        )
+    )
+
+    check_error_in_issues(
+        error_substrings=["which is larger than the declared max"],
+        issues=validation_issues,
+    )
 
 
 @pytest.mark.parametrize(
